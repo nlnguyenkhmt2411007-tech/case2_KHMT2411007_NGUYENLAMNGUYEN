@@ -31,3 +31,5 @@ taskmanager/android/key.properties
 # OS
 .DS_Store
 Thumbs.db
+
+README.backup_*.txt
