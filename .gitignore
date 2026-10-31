@@ -1,0 +1,33 @@
+
+# Node.js Backend
+api/node_modules/
+api/.env
+api/.env.*
+!api/.env.example
+api/*.log
+api/npm-debug.log*
+api/src/**/*.backup_*.js
+
+# Flutter
+taskmanager/.dart_tool/
+taskmanager/.flutter-plugins
+taskmanager/.flutter-plugins-dependencies
+taskmanager/.packages
+taskmanager/build/
+taskmanager/.pub-cache/
+taskmanager/.pub/
+
+# Android
+taskmanager/android/.gradle/
+taskmanager/android/local.properties
+taskmanager/android/key.properties
+*.jks
+*.keystore
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
