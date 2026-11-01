@@ -1,5 +1,8 @@
+
 const express = require("express");
 const cors = require("cors");
+
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 
@@ -15,7 +18,10 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Xử lý API không tồn tại
+// API xác thực tài khoản
+app.use("/api/auth", authRoutes);
+
+// Xử lý đường dẫn không tồn tại
 app.use((req, res) => {
   res.status(404).json({
     success: false,

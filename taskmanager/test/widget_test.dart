@@ -1,30 +1,31 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:taskmanager/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets(
+    'Task Manager hien thi man hinh dang nhap',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const TaskManagerApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      // Kiểm tra tiêu đề màn hình đăng nhập.
+      expect(find.text('Chào mừng trở lại'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      // Kiểm tra thông tin giới thiệu.
+      expect(
+        find.text('Đăng nhập để quản lý công việc và nhóm của bạn'),
+        findsOneWidget,
+      );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
-  });
+      // Kiểm tra có hai trường nhập email và mật khẩu.
+      expect(find.byType(TextFormField), findsNWidgets(2));
+
+      // Kiểm tra có nút đăng nhập.
+      expect(find.widgetWithText(FilledButton, 'Đăng nhập'), findsOneWidget);
+
+      // Kiểm tra biểu tượng Task Manager.
+      expect(find.byIcon(Icons.task_alt_rounded), findsOneWidget);
+    },
+  );
 }
