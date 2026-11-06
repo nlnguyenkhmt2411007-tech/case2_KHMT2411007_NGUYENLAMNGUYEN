@@ -1,8 +1,7 @@
-
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
-import '../profile/profile_screen.dart';
+import '../tasks/task_list_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -59,11 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success) {
       _passwordController.clear();
 
-      // Đăng nhập thành công, chuyển đến trang cá nhân.
+      // Đăng nhập thành công, chuyển đến trang quản lý công việc.
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => const ProfileScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const TaskListScreen()),
         (route) => false,
       );
 
@@ -90,11 +87,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void _openRegister() {
     if (_loading) return;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const RegisterScreen(),
-      ),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const RegisterScreen()));
   }
 
   // =====================================================
@@ -110,26 +104,16 @@ class _LoginScreenState extends State<LoginScreen> {
       labelText: label,
       prefixIcon: Icon(icon),
       suffixIcon: suffix,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFF94A3B8),
-        ),
+        borderSide: const BorderSide(color: Color(0xFF94A3B8)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFF2563EB),
-          width: 2,
-        ),
+        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 16,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );
   }
 
@@ -156,9 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(
-                  color: Color(0xFFE5E9F0),
-                ),
+                side: const BorderSide(color: Color(0xFFE5E9F0)),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -191,9 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Text(
                         'Đăng nhập để quản lý công việc và nhóm của bạn',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(color: Colors.grey),
                       ),
 
                       const SizedBox(height: 28),
@@ -204,9 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         enabled: !_loading,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
-                        autofillHints: const [
-                          AutofillHints.email,
-                        ],
+                        autofillHints: const [AutofillHints.email],
                         decoration: _decoration(
                           label: 'Email',
                           icon: Icons.email_outlined,
@@ -214,9 +192,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         validator: (value) {
                           final email = value?.trim() ?? '';
 
-                          if (!RegExp(
-                            r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-                          ).hasMatch(email)) {
+                          if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                              .hasMatch(email)) {
                             return 'Email không hợp lệ';
                           }
 
@@ -232,9 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         enabled: !_loading,
                         obscureText: _hidePassword,
                         textInputAction: TextInputAction.done,
-                        autofillHints: const [
-                          AutofillHints.password,
-                        ],
+                        autofillHints: const [AutofillHints.password],
                         onFieldSubmitted: (_) {
                           if (!_loading) {
                             _login();

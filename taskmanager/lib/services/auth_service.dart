@@ -3,14 +3,23 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class AuthService {
+  // =====================================================
+  // CẤU HÌNH API
+  // =====================================================
+
   // Android Emulator truy cập backend Node.js trên máy tính.
   static const String baseUrl = 'http://10.0.2.2:3000/api';
 
   // JWT hiện chỉ lưu tạm trong bộ nhớ.
   static String? _accessToken;
 
+  // Kiểm tra trạng thái đăng nhập.
   static bool get isLoggedIn =>
       _accessToken != null && _accessToken!.isNotEmpty;
+
+  // BỔ SUNG CHO PHẦN B:
+  // Cho phép TaskService lấy JWT để gọi API công việc.
+  static String? get accessToken => _accessToken;
 
   // =====================================================
   // 1. ĐĂNG KÝ TÀI KHOẢN
@@ -91,6 +100,7 @@ class AuthService {
           };
         }
 
+        // Lưu JWT sau khi đăng nhập thành công.
         _accessToken = token;
 
         return decoded;
@@ -270,7 +280,7 @@ class AuthService {
           response.statusCode < 300 &&
           decoded['success'] == true) {
         // Xóa JWT trên thiết bị sau khi đổi mật khẩu.
-        // Giao diện sẽ yêu cầu người dùng đăng nhập lại.
+        // Giao diện yêu cầu người dùng đăng nhập lại.
         _accessToken = null;
 
         return decoded;
