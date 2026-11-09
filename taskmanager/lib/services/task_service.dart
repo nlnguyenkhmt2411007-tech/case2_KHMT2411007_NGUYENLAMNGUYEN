@@ -14,6 +14,9 @@ class TaskService {
 
   static Future<Map<String, dynamic>> getTasks({
     String q = '',
+    String scope = 'all',
+    String? primaryAssigneeId,
+    String? primaryEmail,
     String? status,
     String? priority,
     String sortBy = 'createdAt',
@@ -73,7 +76,17 @@ class TaskService {
       };
     }
 
-    final parameters = <String, String>{'sortBy': sortBy, 'order': order};
+    final parameters = <String, String>{
+      'sortBy': sortBy,
+      'order': order,
+      'scope': scope,
+    };
+    if (primaryAssigneeId != null && primaryAssigneeId.isNotEmpty) {
+      parameters['primaryAssigneeId'] = primaryAssigneeId;
+    }
+    if (primaryEmail != null && primaryEmail.trim().isNotEmpty) {
+      parameters['primaryEmail'] = primaryEmail.trim();
+    }
 
     if (q.trim().isNotEmpty) {
       parameters['q'] = q.trim();
@@ -303,6 +316,7 @@ class TaskService {
           'success': true,
           'message': decoded['message'] ?? 'Lấy chi tiết công việc thành công',
           'task': Map<String, dynamic>.from(task),
+          'role': decoded['role'],
         };
       }
 

@@ -1,14 +1,18 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 class AuthService {
   // =====================================================
-  // CẤU HÌNH API
+  // CẤU HÌNH API - HỖ TRỢ WEB VÀ ANDROID EMULATOR
   // =====================================================
 
-  // Android Emulator truy cập backend Node.js trên máy tính.
-  static const String baseUrl = 'http://10.0.2.2:3000/api';
+  // Chrome Web sử dụng localhost.
+  // Android Emulator sử dụng 10.0.2.2 để truy cập máy tính.
+  static const String baseUrl = kIsWeb
+      ? 'http://localhost:3000/api'
+      : 'http://10.0.2.2:3000/api';
 
   // JWT hiện chỉ lưu tạm trong bộ nhớ.
   static String? _accessToken;
@@ -17,8 +21,7 @@ class AuthService {
   static bool get isLoggedIn =>
       _accessToken != null && _accessToken!.isNotEmpty;
 
-  // BỔ SUNG CHO PHẦN B:
-  // Cho phép TaskService lấy JWT để gọi API công việc.
+  // Cho phép các service khác lấy JWT để gọi API.
   static String? get accessToken => _accessToken;
 
   // =====================================================
@@ -279,8 +282,8 @@ class AuthService {
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
           decoded['success'] == true) {
-        // Xóa JWT trên thiết bị sau khi đổi mật khẩu.
-        // Giao diện yêu cầu người dùng đăng nhập lại.
+        // Xóa JWT sau khi đổi mật khẩu thành công.
+        // Người dùng cần đăng nhập lại.
         _accessToken = null;
 
         return decoded;

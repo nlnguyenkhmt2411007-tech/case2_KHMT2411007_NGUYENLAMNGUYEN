@@ -20,6 +20,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   static const Color mutedColor = Color(0xFF64748B);
 
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _primaryEmailController = TextEditingController();
 
   Timer? _searchTimer;
 
@@ -36,13 +37,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
   // B6. BỘ LỌC VÀ SẮP XẾP
   // =====================================================
 
+  String _scope = 'all';
   String _selectedStatus = '';
   String _selectedPriority = '';
   String _sortBy = 'createdAt';
   String _order = 'desc';
 
   bool get _hasFilters {
-    return _searchController.text.trim().isNotEmpty ||
+    return _primaryEmailController.text.trim().isNotEmpty ||
+        _scope != 'all' ||
+        _searchController.text.trim().isNotEmpty ||
         _selectedStatus.isNotEmpty ||
         _selectedPriority.isNotEmpty ||
         _sortBy != 'createdAt' ||
@@ -59,6 +63,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   void dispose() {
     _searchTimer?.cancel();
     _searchController.dispose();
+    _primaryEmailController.dispose();
     super.dispose();
   }
 
@@ -84,6 +89,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     // Lưu bộ lọc tại thời điểm gửi yêu cầu.
     final keyword = _searchController.text.trim();
+    final primaryEmail = _primaryEmailController.text.trim();
+    final scope = _scope;
     final status = _selectedStatus;
     final priority = _selectedPriority;
     final sortBy = _sortBy;
@@ -113,6 +120,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     final hasActiveFilters =
         keyword.isNotEmpty ||
+        primaryEmail.isNotEmpty ||
+        scope != 'all' ||
         status.isNotEmpty ||
         priority.isNotEmpty ||
         sortBy != 'createdAt' ||
@@ -121,6 +130,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
     final filteredResult = hasActiveFilters
         ? await TaskService.getTasks(
             q: keyword,
+            scope: scope,
+            primaryEmail: primaryEmail.isEmpty ? null : primaryEmail,
             status: status.isEmpty ? null : status,
             priority: priority.isEmpty ? null : priority,
             sortBy: sortBy,
@@ -175,8 +186,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
     _searchTimer?.cancel();
 
     _searchController.clear();
+    _primaryEmailController.clear();
 
     setState(() {
+      _scope = 'all';
       _selectedStatus = '';
       _selectedPriority = '';
       _sortBy = 'createdAt';
@@ -866,6 +879,44 @@ class _TaskListScreenState extends State<TaskListScreen> {
           const SizedBox(height: 24),
 
           // B6: TÌM KIẾM, LỌC, SẮP XẾP
+          DropdownButtonFormField<String>(
+            initialValue: _scope,
+            decoration: const InputDecoration(
+              labelText: 'Vai trò công việc',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'all',
+                child: Text('Tất cả công việc liên quan'),
+              ),
+              DropdownMenuItem(value: 'created', child: Text('Tôi tạo')),
+              DropdownMenuItem(value: 'assigned', child: Text('Được giao')),
+              DropdownMenuItem(
+                value: 'primary',
+                child: Text('Phụ trách chính'),
+              ),
+              DropdownMenuItem(value: 'shared', child: Text('Được chia sẻ')),
+            ],
+            onChanged: (v) {
+              setState(() => _scope = v ?? 'all');
+              _loadTasks();
+            },
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _primaryEmailController,
+            decoration: InputDecoration(
+              labelText: 'Lọc theo email người phụ trách chính',
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: _loadTasks,
+              ),
+            ),
+            onSubmitted: (_) => _loadTasks(),
+          ),
+          const SizedBox(height: 14),
           _buildB6Filters(),
 
           const SizedBox(height: 24),

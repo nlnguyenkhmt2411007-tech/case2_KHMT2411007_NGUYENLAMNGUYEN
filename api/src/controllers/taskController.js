@@ -1,3 +1,5 @@
+const {visibleQuery,taskRole,eq}=require("../middleware/taskAccess");
+const User=require("../models/User");
 
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
@@ -288,12 +290,29 @@ async function getTasks(req, res) {
       );
     }
 
-    // 3. Chỉ truy vấn công việc của người đăng nhập.
-    const match = {
-      createdBy: new mongoose.Types.ObjectId(
-        String(req.user._id)
-      )
+    // Công việc được tạo, được giao hoặc được chia sẻ.
+    const userObjectId = new mongoose.Types.ObjectId(String(req.user._id));
+    const scope = query.scope;
+    if (scope !== undefined && !["all","created","assigned","primary","shared"].includes(scope))
+      return sendValidationError(res,"Bộ lọc vai trò không hợp lệ");
+    const filters = {
+      created: {createdBy:userObjectId},
+      assigned: {assigneeIds:userObjectId},
+      primary: {primaryAssigneeId:userObjectId},
+      shared: {"shares.userId":userObjectId}
     };
+    const match = scope && scope!=="all" ? filters[scope] : visibleQuery(userObjectId);
+    if (query.primaryEmail !== undefined) {
+      if(typeof query.primaryEmail!=="string" || query.primaryEmail.trim().length>254 ||
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(query.primaryEmail.trim()))
+        return sendValidationError(res,"Email người phụ trách không hợp lệ");
+      const foundPrimary=await User.findOne({email:query.primaryEmail.trim().toLowerCase()}).select("_id");
+      match.primaryAssigneeId=foundPrimary ? foundPrimary._id : new mongoose.Types.ObjectId("000000000000000000000000");
+    }
+    if (query.primaryAssigneeId !== undefined) {
+      if(!mongoose.isObjectIdOrHexString(query.primaryAssigneeId))return sendValidationError(res,"ID người phụ trách không hợp lệ");
+      match.primaryAssigneeId = new mongoose.Types.ObjectId(query.primaryAssigneeId);
+    }
 
     if (status !== undefined) {
       match.status = status;
@@ -447,7 +466,7 @@ async function getTaskById(req, res) {
 
     const task = await Task.findOne({
       _id: taskId,
-      createdBy: req.user._id
+      ...visibleQuery(req.user._id)
     }).lean();
 
     if (!task) {
@@ -460,6 +479,7 @@ async function getTaskById(req, res) {
     return res.status(200).json({
       success: true,
       message: "Lấy chi tiết công việc thành công",
+      role: taskRole(task,req.user._id),
       task
     });
   } catch (error) {
@@ -489,11 +509,11 @@ async function updateTask(req, res) {
       );
     }
 
-    // 2. Chỉ tìm công việc do người đang đăng nhập tạo.
-    const task = await Task.findOne({
-      _id: taskId,
-      createdBy: req.user._id
-    });
+    // Người tạo hoặc người được chia sẻ quyền editor mới được sửa.
+    const task = await Task.findOne({ _id:taskId, ...visibleQuery(req.user._id) });
+    if (task && !["owner","editor"].includes(taskRole(task,req.user._id))) {
+      return res.status(403).json({success:false,message:"Bạn không có quyền chỉnh sửa công việc"});
+    }
 
     if (!task) {
       return res.status(404).json({

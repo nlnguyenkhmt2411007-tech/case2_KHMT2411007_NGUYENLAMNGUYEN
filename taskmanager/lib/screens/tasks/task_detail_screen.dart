@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/task_service.dart';
 import 'edit_task_screen.dart';
+import 'assign_task_screen.dart';
+import 'task_team_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
@@ -20,6 +22,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   bool _deleting = false;
   String? _error;
   Map<String, dynamic>? _task;
+  String _role = ''; // Mặc định không cấp quyền khi chưa xác nhận vai trò.
 
   @override
   void initState() {
@@ -46,11 +49,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (result['success'] == true && result['task'] is Map) {
       setState(() {
         _task = Map<String, dynamic>.from(result['task'] as Map);
+        _role = (result['role'] ?? '').toString().toLowerCase();
         _loading = false;
       });
     } else {
       setState(() {
         _task = null;
+        _role = '';
         _loading = false;
         _error = (result['message'] ?? 'Không thể tải chi tiết công việc')
             .toString();
@@ -63,7 +68,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   // =====================================================
 
   Future<void> _openEditTask() async {
-    if (_loading || _deleting || _task == null) {
+    if (_loading ||
+        _deleting ||
+        _task == null ||
+        !(_role == 'owner' || _role == 'editor')) {
       return;
     }
 
@@ -92,8 +100,33 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   // B5. HỘP THOẠI XÁC NHẬN XÓA
   // =====================================================
 
+  // =====================================================
+  // C1. MO MAN HINH GIAO CONG VIEC
+  // =====================================================
+
+  Future<void> _openAssignTask() async {
+    if (_loading || _deleting || _task == null || _role != 'owner') {
+      return;
+    }
+
+    final assigned = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AssignTaskScreen(
+          taskId: widget.taskId,
+          taskTitle: (_task!['title'] ?? '').toString(),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (assigned == true) {
+      await _loadTask();
+    }
+  }
+
   Future<void> _confirmDeleteTask() async {
-    if (_loading || _deleting || _task == null) {
+    if (_loading || _deleting || _task == null || _role != 'owner') {
       return;
     }
 
@@ -178,7 +211,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   // =====================================================
 
   Future<void> _deleteTask() async {
-    if (_deleting || _task == null) return;
+    if (_deleting || _task == null || _role != 'owner') return;
 
     setState(() {
       _deleting = true;
@@ -492,53 +525,96 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
           const SizedBox(height: 24),
 
-          // B4: CHỈNH SỬA CÔNG VIỆC
-          SizedBox(
-            height: 50,
-            child: FilledButton.icon(
-              onPressed: _deleting ? null : _openEditTask,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Chỉnh sửa công việc'),
-              style: FilledButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // B5: XÓA CÔNG VIỆC
           SizedBox(
             height: 50,
             child: OutlinedButton.icon(
-              onPressed: _deleting ? null : _confirmDeleteTask,
-              icon: _deleting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: dangerColor,
+              onPressed: () => Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(
+                      builder: (_) => TaskTeamScreen(
+                        taskId: widget.taskId,
+                        title: (_task?['title'] ?? '').toString(),
                       ),
-                    )
-                  : const Icon(Icons.delete_outline),
-              label: Text(_deleting ? 'Đang xóa...' : 'Xóa công việc'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: dangerColor,
-                side: const BorderSide(color: dangerColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                    ),
+                  )
+                  .then((_) {
+                    if (mounted) _loadTask();
+                  }),
+              icon: const Icon(Icons.groups_outlined),
+              label: const Text('Thành viên và chia sẻ'),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          if (_role == 'owner') ...[
+            // C1: GIAO CONG VIEC CHO NHIEU NGUOI
+            SizedBox(
+              height: 50,
+              child: FilledButton.icon(
+                onPressed: _deleting ? null : _openAssignTask,
+                icon: const Icon(Icons.group_add_outlined),
+                label: const Text('Giao công việc'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
-          ),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
+          if (_role == 'owner' || _role == 'editor') ...[
+            // B4: CHỈNH SỬA CÔNG VIỆC
+            SizedBox(
+              height: 50,
+              child: FilledButton.icon(
+                onPressed: _deleting ? null : _openEditTask,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Chỉnh sửa công việc'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
 
+            const SizedBox(height: 12),
+          ],
+          if (_role == 'owner') ...[
+            // B5: XÓA CÔNG VIỆC
+            SizedBox(
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: _deleting ? null : _confirmDeleteTask,
+                icon: _deleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: dangerColor,
+                        ),
+                      )
+                    : const Icon(Icons.delete_outline),
+                label: Text(_deleting ? 'Đang xóa...' : 'Xóa công việc'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: dangerColor,
+                  side: const BorderSide(color: dangerColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+          ],
           // LÀM MỚI
           OutlinedButton.icon(
             onPressed: _deleting ? null : _loadTask,

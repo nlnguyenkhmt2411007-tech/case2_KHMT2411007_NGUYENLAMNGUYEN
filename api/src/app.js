@@ -5,6 +5,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 
+
 const app = express();
 
 // ======================================================
@@ -39,6 +40,7 @@ app.use("/api/auth", authRoutes);
 // POST /api/tasks
 // Tạo công việc mới, yêu cầu JWT hợp lệ.
 app.use("/api/tasks", taskRoutes);
+
 
 // ======================================================
 // 5. XỬ LÝ ĐƯỜNG DẪN KHÔNG TỒN TẠI

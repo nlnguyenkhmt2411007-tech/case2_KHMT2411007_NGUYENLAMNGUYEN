@@ -2,8 +2,9 @@
 const mongoose = require("mongoose");
 
 // ======================================================
-// MODEL TASK - QUẢN LÝ CÔNG VIỆC
-// Phần B - Case Study 2 Task Manager
+// MODEL TASK - CASE STUDY 2 TASK MANAGER
+// B: Quản lý công việc
+// C1: Giao công việc cho nhiều người
 // ======================================================
 
 const taskSchema = new mongoose.Schema(
@@ -39,11 +40,7 @@ const taskSchema = new mongoose.Schema(
     // Mức độ ưu tiên
     priority: {
       type: String,
-      enum: [
-        "thap",
-        "trung_binh",
-        "cao"
-      ],
+      enum: ["thap", "trung_binh", "cao"],
       default: "trung_binh"
     },
 
@@ -65,6 +62,40 @@ const taskSchema = new mongoose.Schema(
       ref: "User",
       required: [true, "Công việc phải có người tạo"],
       index: true
+    },
+
+    primaryAssigneeId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    shares: {
+      type: [{
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        role: { type: String, enum: ["viewer", "editor"], required: true }
+      }], default: []
+    },
+
+    // ==================================================
+    // C1. DANH SÁCH NGƯỜI ĐƯỢC GIAO CÔNG VIỆC
+    // ==================================================
+
+    assigneeIds: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User"
+        }
+      ],
+      default: [],
+      validate: {
+        validator: function (ids) {
+          if (!Array.isArray(ids)) return false;
+
+          const values = ids.map((id) =>
+            String(id).toLowerCase()
+          );
+
+          return new Set(values).size === values.length;
+        },
+        message: "Danh sách người được giao bị trùng"
+      }
     }
   },
   {
@@ -74,7 +105,7 @@ const taskSchema = new mongoose.Schema(
 );
 
 // ======================================================
-// KIỂM TRA NGÀY BẮT ĐẦU VÀ HẠN HOÀN THÀNH
+// KIỂM TRA NGÀY
 // ======================================================
 
 taskSchema.pre("validate", function () {
@@ -91,7 +122,7 @@ taskSchema.pre("validate", function () {
 });
 
 // ======================================================
-// INDEX HỖ TRỢ TRUY VẤN
+// INDEX
 // ======================================================
 
 taskSchema.index({
@@ -102,6 +133,15 @@ taskSchema.index({
 taskSchema.index({
   status: 1,
   priority: 1
+});
+
+taskSchema.index({ primaryAssigneeId: 1 });
+taskSchema.index({ "shares.userId": 1 });
+
+// C1: Hỗ trợ tìm kiếm công việc được giao.
+taskSchema.index({
+  assigneeIds: 1,
+  createdAt: -1
 });
 
 // ======================================================
