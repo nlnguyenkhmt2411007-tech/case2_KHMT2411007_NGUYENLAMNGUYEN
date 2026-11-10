@@ -1,3 +1,6 @@
+
+const mongoose = require("mongoose");
+
 const Notification = require("../models/Notification");
 
 // ======================================================
@@ -42,6 +45,64 @@ async function getNotifications(req, res) {
   }
 }
 
+// ======================================================
+// D5. DANH DAU MOT THONG BAO DA DOC
+// PATCH /api/notifications/:id/read
+// ======================================================
+
+async function markNotificationRead(req, res) {
+  try {
+    const notificationId = req.params.id;
+
+    if (!mongoose.isObjectIdOrHexString(notificationId)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID thong bao khong hop le"
+      });
+    }
+
+    const notification = await Notification.findOneAndUpdate(
+      {
+        _id: notificationId,
+        recipientId: req.user._id
+      },
+      {
+        $set: {
+          isRead: true,
+          readAt: new Date()
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong bao"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Da danh dau thong bao da doc",
+      notification
+    });
+  } catch (error) {
+    console.error(
+      "Mark notification read error:",
+      error.message
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Khong the cap nhat thong bao"
+    });
+  }
+}
+
 module.exports = {
-  getNotifications
+  getNotifications,
+  markNotificationRead
 };

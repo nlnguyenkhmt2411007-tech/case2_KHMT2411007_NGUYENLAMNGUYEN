@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const {
@@ -5,7 +6,8 @@ const {
 } = require("../middleware/authMiddleware");
 
 const {
-  getNotifications
+  getNotifications,
+  markNotificationRead
 } = require("../controllers/notificationController");
 
 const router = express.Router();
@@ -15,5 +17,8 @@ router.use(requireAuth);
 
 // D4: Danh sach thong bao cua tai khoan hien tai.
 router.get("/", getNotifications);
+
+// D5: Danh dau thong bao da doc.
+router.patch("/:id/read", markNotificationRead);
 
 module.exports = router;
