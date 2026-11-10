@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/task_service.dart';
 import '../profile/profile_screen.dart';
+import '../notifications/notification_screen.dart';
 import 'create_task_screen.dart';
 import 'task_detail_screen.dart';
 
@@ -968,6 +969,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
         .push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
   }
 
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificationScreen()),
+    );
+    if (mounted) await _loadTasks();
+  }
+
   // =====================================================
   // GIAO DIỆN CHÍNH
   // =====================================================
@@ -984,6 +992,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
           style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            onPressed: _openNotifications,
+            tooltip: 'Thông báo',
+            icon: const Icon(Icons.notifications_outlined),
+          ),
           IconButton(
             onPressed: _openProfile,
             tooltip: 'Thông tin cá nhân',
