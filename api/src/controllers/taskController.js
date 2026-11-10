@@ -3,6 +3,7 @@ const User=require("../models/User");
 
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
+const { notifyTaskStatusChanged } = require("../services/notificationService");
 
 // ======================================================
 // PHẦN B - QUẢN LÝ CÔNG VIỆC
@@ -522,6 +523,9 @@ async function updateTask(req, res) {
       });
     }
 
+    // D3: Ghi nhan trang thai cu truoc khi cap nhat.
+    const oldStatus = task.status;
+
     // 3. Kiểm tra body.
     const body = req.body;
 
@@ -674,6 +678,37 @@ async function updateTask(req, res) {
 
     // 11. Lưu thay đổi.
     await task.save();
+
+    // D3: Chi thong bao khi trang thai thuc su thay doi.
+    let notificationResult = {
+      success: true,
+      created: 0
+    };
+
+    if (oldStatus !== task.status) {
+      const recipientIds = [
+        task.createdBy,
+        ...task.assigneeIds,
+        task.primaryAssigneeId,
+        ...task.shares.map((share) => share.userId)
+      ];
+
+      notificationResult = await notifyTaskStatusChanged({
+        taskId: task._id,
+        taskTitle: task.title,
+        actorId: req.user._id,
+        recipientIds,
+        oldStatus,
+        newStatus: task.status
+      });
+
+      if (!notificationResult.success) {
+        console.error(
+          "D3 notification warning:",
+          notificationResult.message
+        );
+      }
+    }
 
     return res.status(200).json({
       success: true,
