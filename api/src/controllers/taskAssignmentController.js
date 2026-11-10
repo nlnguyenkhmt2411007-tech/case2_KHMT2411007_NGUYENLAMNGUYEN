@@ -5,6 +5,14 @@ const Task = require("../models/Task");
 const User = require("../models/User");
 
 // ======================================================
+// D1. SERVICE THÔNG BÁO KHI GIAO CÔNG VIỆC
+// ======================================================
+
+const {
+  notifyTaskAssigned
+} = require("../services/notificationService");
+
+// ======================================================
 // C1. GIAO CÔNG VIỆC CHO MỘT HOẶC NHIỀU NGƯỜI
 // POST /api/tasks/:id/assignees
 // ======================================================
@@ -181,21 +189,50 @@ async function assignTask(req, res) {
       });
     }
 
-    // 10. Trả về danh sách người được giao.
+    // 10. Lấy danh sách tất cả người được giao.
     const assignedUsers = await User.find({
       _id: { $in: updatedTask.assigneeIds }
     })
       .select("_id fullName email")
       .lean();
 
-    res.status(200).json({
+    // ==================================================
+    // D1. TỰ ĐỘNG TẠO THÔNG BÁO KHI GIAO VIỆC
+    // ==================================================
+
+    // Chỉ tạo thông báo cho những người vừa được giao.
+    // Không tạo lại thông báo cho người đã được giao trước đó.
+    const notificationResult = await notifyTaskAssigned({
+      taskId: updatedTask._id,
+      taskTitle: updatedTask.title,
+      actorId: req.user._id,
+      recipientIds: users.map((user) => user._id)
+    });
+
+    // Nếu lưu thông báo thất bại, vẫn giữ kết quả giao việc.
+    // Lỗi được ghi vào Backend log để kiểm tra.
+    if (!notificationResult.success) {
+      console.error(
+        "D1 notification warning:",
+        notificationResult.message
+      );
+    }
+
+    // 11. Trả về kết quả giao công việc.
+    return res.status(200).json({
       success: true,
       message: "Giao công việc thành công",
       taskId: updatedTask._id,
       totalAssignees: assignedUsers.length,
-      assignees: assignedUsers
+      assignees: assignedUsers,
+
+      // D1: Thông tin kết quả tạo thông báo.
+      notification: {
+        success: notificationResult.success,
+        created: notificationResult.created
+      }
     });
-    // D: Lưu thông báo in-app, tùy chọn gửi email khi cấu hình SMTP.
+
   } catch (error) {
     if (error.name === "ValidationError") {
       return res.status(400).json({
@@ -207,6 +244,7 @@ async function assignTask(req, res) {
     console.error("Assign task error:", error.message);
 
     if (res.headersSent) return;
+
     return res.status(500).json({
       success: false,
       message: "Không thể giao công việc"
