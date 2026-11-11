@@ -1,9 +1,11 @@
+
 const {visibleQuery,taskRole,eq}=require("../middleware/taskAccess");
 const User=require("../models/User");
 
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const { notifyTaskStatusChanged } = require("../services/notificationService");
+const { sendTaskEventEmails } = require("../services/emailService");
 
 // ======================================================
 // PHẦN B - QUẢN LÝ CÔNG VIỆC
@@ -296,22 +298,34 @@ async function getTasks(req, res) {
     const scope = query.scope;
     if (scope !== undefined && !["all","created","assigned","primary","shared"].includes(scope))
       return sendValidationError(res,"Bộ lọc vai trò không hợp lệ");
+
     const filters = {
       created: {createdBy:userObjectId},
       assigned: {assigneeIds:userObjectId},
       primary: {primaryAssigneeId:userObjectId},
       shared: {"shares.userId":userObjectId}
     };
+
     const match = scope && scope!=="all" ? filters[scope] : visibleQuery(userObjectId);
+
     if (query.primaryEmail !== undefined) {
       if(typeof query.primaryEmail!=="string" || query.primaryEmail.trim().length>254 ||
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(query.primaryEmail.trim()))
         return sendValidationError(res,"Email người phụ trách không hợp lệ");
-      const foundPrimary=await User.findOne({email:query.primaryEmail.trim().toLowerCase()}).select("_id");
-      match.primaryAssigneeId=foundPrimary ? foundPrimary._id : new mongoose.Types.ObjectId("000000000000000000000000");
+
+      const foundPrimary=await User.findOne({
+        email:query.primaryEmail.trim().toLowerCase()
+      }).select("_id");
+
+      match.primaryAssigneeId=foundPrimary
+        ? foundPrimary._id
+        : new mongoose.Types.ObjectId("000000000000000000000000");
     }
+
     if (query.primaryAssigneeId !== undefined) {
-      if(!mongoose.isObjectIdOrHexString(query.primaryAssigneeId))return sendValidationError(res,"ID người phụ trách không hợp lệ");
+      if(!mongoose.isObjectIdOrHexString(query.primaryAssigneeId))
+        return sendValidationError(res,"ID người phụ trách không hợp lệ");
+
       match.primaryAssigneeId = new mongoose.Types.ObjectId(query.primaryAssigneeId);
     }
 
@@ -511,9 +525,16 @@ async function updateTask(req, res) {
     }
 
     // Người tạo hoặc người được chia sẻ quyền editor mới được sửa.
-    const task = await Task.findOne({ _id:taskId, ...visibleQuery(req.user._id) });
+    const task = await Task.findOne({
+      _id:taskId,
+      ...visibleQuery(req.user._id)
+    });
+
     if (task && !["owner","editor"].includes(taskRole(task,req.user._id))) {
-      return res.status(403).json({success:false,message:"Bạn không có quyền chỉnh sửa công việc"});
+      return res.status(403).json({
+        success:false,
+        message:"Bạn không có quyền chỉnh sửa công việc"
+      });
     }
 
     if (!task) {
@@ -685,6 +706,14 @@ async function updateTask(req, res) {
       created: 0
     };
 
+    // D7: Khong gui email neu trang thai khong thay doi.
+    let emailResult = {
+      success: true,
+      attempted: 0,
+      sent: 0,
+      failed: 0
+    };
+
     if (oldStatus !== task.status) {
       const recipientIds = [
         task.createdBy,
@@ -708,13 +737,57 @@ async function updateTask(req, res) {
           notificationResult.message
         );
       }
+
+      // D7: Gui email sau khi luu cong viec.
+      // Loi email khong huy ket qua cap nhat.
+      try {
+        emailResult = await sendTaskEventEmails({
+          eventType: "task_status_changed",
+          taskTitle: task.title,
+          actorId: req.user._id,
+          recipientIds,
+          oldStatus,
+          newStatus: task.status
+        });
+
+        if (!emailResult.success) {
+          console.error(
+            "D7 status email warning: Some emails were not sent"
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          "D7 status email error:",
+          emailError.code || "SERVICE_ERROR"
+        );
+
+        emailResult = {
+          success: false,
+          attempted: 0,
+          sent: 0,
+          failed: 1
+        };
+      }
     }
 
     return res.status(200).json({
       success: true,
       message: "Cập nhật công việc thành công",
-      task
+      task,
+
+      notification: {
+        success: notificationResult.success,
+        created: notificationResult.created
+      },
+
+      emailNotification: {
+        success: emailResult.success,
+        attempted: emailResult.attempted,
+        sent: emailResult.sent,
+        failed: emailResult.failed
+      }
     });
+
   } catch (error) {
     if (error.name === "ValidationError") {
       return sendValidationError(res, error.message);
@@ -767,6 +840,7 @@ async function deleteTask(req, res) {
       message: "Xóa công việc thành công",
       taskId: deletedTask._id.toString()
     });
+
   } catch (error) {
     console.error("Delete task error:", error.message);
 

@@ -1,9 +1,18 @@
 
 const User = require("../models/User");
 const { eq } = require("../middleware/taskAccess");
+
 const {
   notifyTaskShared
 } = require("../services/notificationService");
+
+// ======================================================
+// D7. SERVICE GUI EMAIL KHI CHIA SE CONG VIEC
+// ======================================================
+
+const {
+  sendTaskEventEmails
+} = require("../services/emailService");
 
 const normalize = email =>
   typeof email === "string"
@@ -195,6 +204,7 @@ async function removeAssignee(req, res) {
 
 // ======================================================
 // D2. CHIA SE CONG VIEC VA TAO THONG BAO
+// D7. GUI EMAIL KHI CHIA SE MOI
 // ======================================================
 
 async function upsertShares(req, res) {
@@ -264,6 +274,47 @@ async function upsertShares(req, res) {
       }
     }
 
+    // ==================================================
+    // D7. GUI EMAIL CHO NGUOI MOI DUOC CHIA SE
+    // ==================================================
+
+    let emailResult = {
+      success: true,
+      attempted: 0,
+      sent: 0,
+      failed: 0
+    };
+
+    if (newRecipientIds.length > 0) {
+      try {
+        emailResult = await sendTaskEventEmails({
+          eventType: "task_shared",
+          taskTitle: req.task.title,
+          actorId: req.user._id,
+          recipientIds: newRecipientIds,
+          role
+        });
+
+        if (!emailResult.success) {
+          console.error(
+            "D7 share email warning: Some emails were not sent"
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          "D7 share email error:",
+          emailError.code || "SERVICE_ERROR"
+        );
+
+        emailResult = {
+          success: false,
+          attempted: 0,
+          sent: 0,
+          failed: 1
+        };
+      }
+    }
+
     return res.json({
       success: true,
       message: "Đã cấp hoặc cập nhật quyền chia sẻ",
@@ -271,6 +322,12 @@ async function upsertShares(req, res) {
       notification: {
         success: notificationResult.success,
         created: notificationResult.created
+      },
+      emailNotification: {
+        success: emailResult.success,
+        attempted: emailResult.attempted,
+        sent: emailResult.sent,
+        failed: emailResult.failed
       }
     });
   } catch (err) {

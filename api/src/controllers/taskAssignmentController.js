@@ -13,6 +13,14 @@ const {
 } = require("../services/notificationService");
 
 // ======================================================
+// D7. SERVICE GỬI EMAIL KHI GIAO CÔNG VIỆC
+// ======================================================
+
+const {
+  sendTaskEventEmails
+} = require("../services/emailService");
+
+// ======================================================
 // C1. GIAO CÔNG VIỆC CHO MỘT HOẶC NHIỀU NGƯỜI
 // POST /api/tasks/:id/assignees
 // ======================================================
@@ -218,6 +226,38 @@ async function assignTask(req, res) {
       );
     }
 
+    // ==================================================
+    // D7. TỰ ĐỘNG GỬI EMAIL KHI GIAO CÔNG VIỆC
+    // ==================================================
+
+    let emailResult = {
+      success: false,
+      attempted: 0,
+      sent: 0,
+      failed: 0
+    };
+
+    try {
+      emailResult = await sendTaskEventEmails({
+        eventType: "task_assigned",
+        taskTitle: updatedTask.title,
+        actorId: req.user._id,
+        recipientIds: users.map((user) => user._id)
+      });
+
+      if (!emailResult.success) {
+        console.error(
+          "D7 email warning: Some emails were not sent"
+        );
+      }
+    } catch (emailError) {
+      // Email lỗi không được làm mất kết quả giao việc.
+      console.error(
+        "D7 email error:",
+        emailError.code || "SERVICE_ERROR"
+      );
+    }
+
     // 11. Trả về kết quả giao công việc.
     return res.status(200).json({
       success: true,
@@ -230,6 +270,14 @@ async function assignTask(req, res) {
       notification: {
         success: notificationResult.success,
         created: notificationResult.created
+      },
+
+      // D7: Thông tin kết quả gửi email.
+      emailNotification: {
+        success: emailResult.success,
+        attempted: emailResult.attempted,
+        sent: emailResult.sent,
+        failed: emailResult.failed
       }
     });
 
