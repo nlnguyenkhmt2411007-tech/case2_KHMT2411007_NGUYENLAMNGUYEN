@@ -5,6 +5,7 @@ const Task = require("../models/Task");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const DueReminder = require("../models/DueReminder");
+const EmailLog = require("../models/EmailLog");
 
 // ======================================================
 // D5. NHAC VIEC TRUOC HAN - THEO DE BAI
@@ -15,6 +16,43 @@ const HOURS_BEFORE = 24;
 const IN_APP_RECOVERY_MINUTES = 10;
 
 let scanRunning = false;
+
+// ======================================================
+// D6. LUU LICH SU GUI EMAIL NHAC HAN
+// ======================================================
+
+async function saveReminderEmailLog({
+  task,
+  recipient,
+  attemptedAt,
+  status,
+  errorCode,
+  messageId
+}) {
+  try {
+    await EmailLog.create({
+      eventType: "task_due_reminder",
+      taskId: task._id,
+      actorId: null,
+      recipientId: recipient._id,
+      recipientEmail: recipient.email,
+      subject: "TaskManager - Nhắc nhở công việc sắp đến hạn",
+      status,
+      attemptedAt,
+      sentAt: status === "sent" ? new Date() : null,
+      errorCode: status === "failed"
+        ? String(errorCode || "EMAIL_FAILED").slice(0, 100)
+        : null,
+      messageId: messageId ? String(messageId).slice(0, 255) : null
+    });
+  } catch (error) {
+    // Khong gui lai SMTP neu ghi log that bai.
+    console.error(
+      "D6 reminder email log failed:",
+      error.code || "EMAIL_LOG_FAILED"
+    );
+  }
+}
 
 function uniqueRecipientIds(task) {
   const ids = [
@@ -367,6 +405,13 @@ async function processEmailReminder(
     return;
   }
 
+  let recipient = null;
+  let smtpAttempted = false;
+  let smtpAccepted = false;
+  let smtpAttemptedAt = null;
+  let smtpMessageId = null;
+  let smtpErrorCode = null;
+
   try {
     const eligible = await isTaskEligible(
       task._id,
@@ -390,7 +435,7 @@ async function processEmailReminder(
       return;
     }
 
-    const recipient = await User.findById(
+    recipient = await User.findById(
       key.recipientId
     )
       .select("fullName email")
@@ -406,6 +451,8 @@ async function processEmailReminder(
     }
 
     result.emailAttempted++;
+    smtpAttempted = true;
+    smtpAttemptedAt = new Date();
 
     const response =
       await transporterHolder.current.sendMail({
@@ -427,6 +474,10 @@ async function processEmailReminder(
       throw new Error("SMTP_NOT_ACCEPTED");
     }
 
+    // Ghi nhan SMTP da chap nhan, truoc khi cap nhat MongoDB.
+    smtpAccepted = true;
+    smtpMessageId = response.messageId || null;
+
     await DueReminder.updateOne(
       {
         _id: reminder._id,
@@ -446,6 +497,7 @@ async function processEmailReminder(
     const code = String(
       error.code || error.message || "EMAIL_FAILED"
     ).slice(0, 100);
+    smtpErrorCode = code;
 
     // Khong tu dong retry:
     // SMTP co the da nhan email truoc khi loi.
@@ -468,6 +520,20 @@ async function processEmailReminder(
       "D5 email reminder error:",
       code
     );
+  } finally {
+    // D6 chi ghi 1 log neu da bat dau thu gui SMTP.
+    // Neu SMTP da chap nhan nhung cap nhat DB bi loi,
+    // van ghi "sent", khong lam sai ket qua giao thu.
+    if (smtpAttempted && recipient?.email) {
+      await saveReminderEmailLog({
+        task,
+        recipient,
+        attemptedAt: smtpAttemptedAt,
+        status: smtpAccepted ? "sent" : "failed",
+        errorCode: smtpAccepted ? null : smtpErrorCode,
+        messageId: smtpMessageId
+      });
+    }
   }
 }
 

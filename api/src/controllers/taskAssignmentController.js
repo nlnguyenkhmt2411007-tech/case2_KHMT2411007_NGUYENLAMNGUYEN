@@ -240,6 +240,7 @@ async function assignTask(req, res) {
     try {
       emailResult = await sendTaskEventEmails({
         eventType: "task_assigned",
+        taskId: updatedTask._id,
         taskTitle: updatedTask.title,
         actorId: req.user._id,
         recipientIds: users.map((user) => user._id)

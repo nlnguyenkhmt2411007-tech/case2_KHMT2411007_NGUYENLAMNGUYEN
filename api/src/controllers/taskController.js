@@ -743,6 +743,7 @@ async function updateTask(req, res) {
       try {
         emailResult = await sendTaskEventEmails({
           eventType: "task_status_changed",
+          taskId: task._id,
           taskTitle: task.title,
           actorId: req.user._id,
           recipientIds,

@@ -289,6 +289,7 @@ async function upsertShares(req, res) {
       try {
         emailResult = await sendTaskEventEmails({
           eventType: "task_shared",
+          taskId: req.task._id,
           taskTitle: req.task.title,
           actorId: req.user._id,
           recipientIds: newRecipientIds,
