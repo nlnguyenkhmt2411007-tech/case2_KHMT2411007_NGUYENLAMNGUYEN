@@ -15,7 +15,8 @@ const emailLogSchema = new mongoose.Schema(
         "task_assigned",
         "task_shared",
         "task_status_changed",
-        "task_due_reminder"
+        "task_due_reminder",
+        "task_due_date_changed"
       ]
     },
 

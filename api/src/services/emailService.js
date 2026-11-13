@@ -5,10 +5,9 @@ const User = require("../models/User");
 const EmailLog = require("../models/EmailLog");
 
 // ======================================================
-// D6. GUI EMAIL VA LUU LICH SU THANH CONG / THAT BAI
+// D3 + D6. GUI EMAIL VA LUU LICH SU
 // ======================================================
 
-// Giu nguyen cac loai su kien email hien tai.
 const STATUS_LABELS = {
   chua_thuc_hien: "Chưa thực hiện",
   dang_thuc_hien: "Đang thực hiện",
@@ -49,6 +48,37 @@ function createTransporter() {
 }
 
 // ======================================================
+// D3. DINH DANG NGAY HOAN THANH
+// ======================================================
+
+function normalizeDueDate(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Ngay hoan thanh khong hop le");
+  }
+
+  // Su dung UTC de phu hop voi ngay duoc luu trong MongoDB.
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDueDate(value) {
+  const normalized = normalizeDueDate(value);
+
+  if (!normalized) {
+    return "Chưa đặt hạn";
+  }
+
+  const [year, month, day] = normalized.split("-");
+
+  return `${day}/${month}/${year}`;
+}
+
+// ======================================================
 // NOI DUNG EMAIL
 // ======================================================
 
@@ -58,6 +88,8 @@ function buildEmailContent({
   actorName,
   oldStatus,
   newStatus,
+  oldDueDate,
+  newDueDate,
   role
 }) {
   const title = String(
@@ -108,6 +140,21 @@ function buildEmailContent({
           `${title}\n\n` +
           `Trạng thái cũ: ${STATUS_LABELS[oldStatus]}\n` +
           `Trạng thái mới: ${STATUS_LABELS[newStatus]}\n\n` +
+          `Vui lòng đăng nhập TaskManager để xem chi tiết.\n\n` +
+          `Trân trọng,\nTaskManager`
+      };
+
+    // D3: Email khi thay doi han hoan thanh.
+    case "task_due_date_changed":
+      return {
+        subject:
+          "TaskManager - Hạn hoàn thành công việc thay đổi",
+        text:
+          `Xin chào,\n\n` +
+          `${actor} đã thay đổi hạn hoàn thành của công việc:\n` +
+          `${title}\n\n` +
+          `Hạn cũ: ${formatDueDate(oldDueDate)}\n` +
+          `Hạn mới: ${formatDueDate(newDueDate)}\n\n` +
           `Vui lòng đăng nhập TaskManager để xem chi tiết.\n\n` +
           `Trân trọng,\nTaskManager`
       };
@@ -174,9 +221,6 @@ async function saveEmailLog({
 
     return true;
   } catch (error) {
-    // D6 khong duoc lam hong viec gui email.
-    // Neu MongoDB khong luu duoc log,
-    // ghi canh bao de kiem tra sau.
     console.error(
       "D6 email log save failed:",
       error.code || error.message
@@ -198,6 +242,8 @@ async function sendTaskEventEmails({
   recipientIds,
   oldStatus,
   newStatus,
+  oldDueDate,
+  newDueDate,
   role
 }) {
   const result = {
@@ -216,7 +262,8 @@ async function sendTaskEventEmails({
       ![
         "task_assigned",
         "task_shared",
-        "task_status_changed"
+        "task_status_changed",
+        "task_due_date_changed"
       ].includes(eventType)
     ) {
       throw new Error(
@@ -236,12 +283,22 @@ async function sendTaskEventEmails({
       );
     }
 
-    // Khong gui email neu trang thai khong thay doi.
+    // Khong gui neu trang thai khong thay doi.
     if (
       eventType === "task_status_changed" &&
       oldStatus === newStatus
     ) {
       return result;
+    }
+
+    // D3: Khong gui neu han hoan thanh khong thay doi.
+    if (eventType === "task_due_date_changed") {
+      const oldDate = normalizeDueDate(oldDueDate);
+      const newDate = normalizeDueDate(newDueDate);
+
+      if (oldDate === newDate) {
+        return result;
+      }
     }
 
     // Loai bo ID trung va nguoi thuc hien thao tac.
@@ -281,6 +338,8 @@ async function sendTaskEventEmails({
       actorName: actor?.fullName,
       oldStatus,
       newStatus,
+      oldDueDate,
+      newDueDate,
       role
     });
 
@@ -343,17 +402,13 @@ async function sendTaskEventEmails({
 
         result.failed++;
 
-        // Khong in email hoac mat khau SMTP.
         console.error(
           "D6 email delivery failed:",
           error.code || "UNKNOWN"
         );
       }
 
-      // ==================================================
-      // D6: LUU LICH SU SAU MOI LAN THU GUI
-      // ==================================================
-
+      // D6: Luu lich su sau moi lan thu gui.
       await saveEmailLog({
         eventType,
         taskId,
