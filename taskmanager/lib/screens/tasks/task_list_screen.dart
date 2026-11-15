@@ -34,6 +34,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _allTasks = [];
 
+  // E2: So cong viec theo vai tro cua tai khoan dang nhap.
+  int _assignedCount = 0;
+  int _primaryCount = 0;
+
   // =====================================================
   // B6. BỘ LỌC VÀ SẮP XẾP
   // =====================================================
@@ -128,38 +132,63 @@ class _TaskListScreenState extends State<TaskListScreen> {
         sortBy != 'createdAt' ||
         order != 'desc';
 
-    final filteredResult = hasActiveFilters
-        ? await TaskService.getTasks(
-            q: keyword,
-            scope: scope,
-            primaryEmail: primaryEmail.isEmpty ? null : primaryEmail,
-            status: status.isEmpty ? null : status,
-            priority: priority.isEmpty ? null : priority,
-            sortBy: sortBy,
-            order: order,
-          )
-        : allResult;
+    // E2: Lay so luong duoc giao va phu trach chinh theo tai khoan.
+    // Cac truy van nay KHONG phu thuoc bo loc B6 tren giao dien.
+    final results = await Future.wait<Map<String, dynamic>>([
+      hasActiveFilters
+          ? TaskService.getTasks(
+              q: keyword,
+              scope: scope,
+              primaryEmail: primaryEmail.isEmpty ? null : primaryEmail,
+              status: status.isEmpty ? null : status,
+              priority: priority.isEmpty ? null : priority,
+              sortBy: sortBy,
+              order: order,
+            )
+          : Future<Map<String, dynamic>>.value(allResult),
+      TaskService.getTasks(scope: 'assigned'),
+      TaskService.getTasks(scope: 'primary'),
+    ]);
 
     if (!mounted || requestId != _requestId) return;
 
-    if (filteredResult['success'] == true) {
-      setState(() {
-        _allTasks = allTasks;
-        _tasks = _parseTasks(filteredResult['tasks']);
-        _loading = false;
-        _filterLoading = false;
-        _error = null;
-      });
-    } else {
+    final filteredResult = results[0];
+    final assignedResult = results[1];
+    final primaryResult = results[2];
+
+    final failed = <Map<String, dynamic>>[
+      filteredResult,
+      assignedResult,
+      primaryResult,
+    ].where((result) => result['success'] != true).toList();
+
+    if (failed.isNotEmpty) {
       setState(() {
         _loading = false;
         _filterLoading = false;
         _error =
-            (filteredResult['message'] ??
-                    'Không thể tìm kiếm hoặc lọc công việc')
+            (failed.first['message'] ??
+                    'Không thể tải đầy đủ thống kê công việc')
                 .toString();
       });
+      return;
     }
+
+    int resultTotal(Map<String, dynamic> result) {
+      final total = result['total'];
+      if (total is int && total >= 0) return total;
+      return _parseTasks(result['tasks']).length;
+    }
+
+    setState(() {
+      _allTasks = allTasks;
+      _tasks = _parseTasks(filteredResult['tasks']);
+      _assignedCount = resultTotal(assignedResult);
+      _primaryCount = resultTotal(primaryResult);
+      _loading = false;
+      _filterLoading = false;
+      _error = null;
+    });
   }
 
   // =====================================================
@@ -392,11 +421,103 @@ class _TaskListScreenState extends State<TaskListScreen> {
             const SizedBox(height: 4),
             Text(
               title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: mutedColor, fontSize: 12),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // =====================================================
+  // E1 + E2. THONG KE RESPONSIVE
+  // =====================================================
+
+  Widget _buildStatistics({
+    required int total,
+    required int notStarted,
+    required int inProgress,
+    required int completed,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 760;
+
+        Widget pair(Widget first, Widget second) => Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [first, const SizedBox(width: 12), second],
+        );
+
+        Widget totalCard() => _statCard(
+          title: 'Tổng công việc',
+          value: '$total',
+          icon: Icons.assignment_outlined,
+          color: primaryColor,
+        );
+        Widget notStartedCard() => _statCard(
+          title: 'Chưa thực hiện',
+          value: '$notStarted',
+          icon: Icons.radio_button_unchecked,
+          color: const Color(0xFF64748B),
+        );
+        Widget inProgressCard() => _statCard(
+          title: 'Đang thực hiện',
+          value: '$inProgress',
+          icon: Icons.pending_actions_outlined,
+          color: const Color(0xFFD97706),
+        );
+        Widget completedCard() => _statCard(
+          title: 'Đã hoàn thành',
+          value: '$completed',
+          icon: Icons.check_circle_outline,
+          color: const Color(0xFF059669),
+        );
+        Widget assignedCard() => _statCard(
+          title: 'Công việc được giao',
+          value: '$_assignedCount',
+          icon: Icons.people_outline,
+          color: const Color(0xFF7C3AED),
+        );
+        Widget primaryCard() => _statCard(
+          title: 'Phụ trách chính',
+          value: '$_primaryCount',
+          icon: Icons.person_outline,
+          color: const Color(0xFF0891B2),
+        );
+
+        if (wide) {
+          return Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  totalCard(),
+                  const SizedBox(width: 12),
+                  notStartedCard(),
+                  const SizedBox(width: 12),
+                  inProgressCard(),
+                  const SizedBox(width: 12),
+                  completedCard(),
+                ],
+              ),
+              const SizedBox(height: 12),
+              pair(assignedCard(), primaryCard()),
+            ],
+          );
+        }
+
+        return Column(
+          children: [
+            pair(totalCard(), notStartedCard()),
+            const SizedBox(height: 12),
+            pair(inProgressCard(), completedCard()),
+            const SizedBox(height: 12),
+            pair(assignedCard(), primaryCard()),
+          ],
+        );
+      },
     );
   }
 
@@ -829,21 +950,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
       );
     }
 
-    // Thống kê từ toàn bộ công việc,
-    // không bị thay đổi khi lọc danh sách.
-
-    // E1: Thong ke tu tat ca cong viec lien quan.
-    // Khong bi anh huong boi tim kiem va bo loc B6.
+    // E1: Thong ke trang thai tren danh sach day du, khong loc.
     final totalTasks = _allTasks.length;
-
     final notStarted = _allTasks
         .where((task) => task['status'] == 'chua_thuc_hien')
         .length;
-
     final inProgress = _allTasks
         .where((task) => task['status'] == 'dang_thuc_hien')
         .length;
-
     final completed = _allTasks
         .where((task) => task['status'] == 'da_hoan_thanh')
         .length;
@@ -872,75 +986,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
           const SizedBox(height: 20),
 
-          // =====================================================
-          // E1. THONG KE CONG VIEC THEO TRANG THAI
-          // =====================================================
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 760;
-
-              Widget totalCard() => _statCard(
-                title: 'Tổng công việc',
-                value: '$totalTasks',
-                icon: Icons.assignment_outlined,
-                color: primaryColor,
-              );
-
-              Widget notStartedCard() => _statCard(
-                title: 'Chưa thực hiện',
-                value: '$notStarted',
-                icon: Icons.radio_button_unchecked,
-                color: const Color(0xFF64748B),
-              );
-
-              Widget inProgressCard() => _statCard(
-                title: 'Đang thực hiện',
-                value: '$inProgress',
-                icon: Icons.pending_actions_outlined,
-                color: const Color(0xFFD97706),
-              );
-
-              Widget completedCard() => _statCard(
-                title: 'Đã hoàn thành',
-                value: '$completed',
-                icon: Icons.check_circle_outline,
-                color: const Color(0xFF059669),
-              );
-
-              if (isWide) {
-                return Row(
-                  children: [
-                    totalCard(),
-                    const SizedBox(width: 12),
-                    notStartedCard(),
-                    const SizedBox(width: 12),
-                    inProgressCard(),
-                    const SizedBox(width: 12),
-                    completedCard(),
-                  ],
-                );
-              }
-
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      totalCard(),
-                      const SizedBox(width: 12),
-                      notStartedCard(),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      inProgressCard(),
-                      const SizedBox(width: 12),
-                      completedCard(),
-                    ],
-                  ),
-                ],
-              );
-            },
+          _buildStatistics(
+            total: totalTasks,
+            notStarted: notStarted,
+            inProgress: inProgress,
+            completed: completed,
           ),
 
           const SizedBox(height: 24),
