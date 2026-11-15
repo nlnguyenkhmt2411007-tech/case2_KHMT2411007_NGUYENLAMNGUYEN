@@ -916,6 +916,227 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   // =====================================================
+  // E3. PHAN LOAI VA HIEN THI CONG VIEC THEO HAN
+  // =====================================================
+
+  // So sanh theo NGAY lich (dd/MM/yyyy), giong _formatDate.
+  // Khong so sanh gio UTC voi gio dia phuong, tranh canh bao sai.
+  DateTime? _e3DueDay(Map<String, dynamic> task) {
+    final raw = task['dueDate']?.toString() ?? '';
+    if (raw.length < 10) return null;
+
+    final day = DateTime.tryParse(raw.substring(0, 10));
+    if (day == null) return null;
+    return DateTime(day.year, day.month, day.day);
+  }
+
+  Widget _e3Group({
+    required String title,
+    required List<Map<String, dynamic>> tasks,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: textColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${tasks.length}',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          if (tasks.isEmpty) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Không có công việc',
+              style: TextStyle(color: mutedColor, fontSize: 12),
+            ),
+          ] else ...[
+            const SizedBox(height: 8),
+            for (final task in tasks) ...[
+              const Divider(height: 15, color: Color(0xFFE2E8F0)),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _openTaskDetail(task),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (task['title'] ?? 'Không có tiêu đề').toString(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Hạn: ${_formatDate(task['dueDate'])}',
+                              style: const TextStyle(
+                                color: mutedColor,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: mutedColor,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildE3Deadlines() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final overdue = <Map<String, dynamic>>[];
+    final dueToday = <Map<String, dynamic>>[];
+    final dueTomorrow = <Map<String, dynamic>>[];
+
+    for (final task in _allTasks) {
+      if (task['status'] == 'da_hoan_thanh') continue;
+      final day = _e3DueDay(task);
+      if (day == null) continue;
+
+      if (day.isBefore(today)) {
+        overdue.add(task);
+      } else if (day.isAtSameMomentAs(today)) {
+        dueToday.add(task);
+      } else if (day.isAtSameMomentAs(tomorrow)) {
+        dueTomorrow.add(task);
+      }
+    }
+
+    // Cong viec qua han cu hon xep truoc; nhom con lai xep theo han.
+    int compareDates(Map<String, dynamic> a, Map<String, dynamic> b) {
+      return _e3DueDay(a)!.compareTo(_e3DueDay(b)!);
+    }
+
+    overdue.sort(compareDates);
+    dueToday.sort(compareDates);
+    dueTomorrow.sort(compareDates);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.calendar_month_outlined, color: primaryColor),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Theo dõi thời hạn công việc',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Thống kê theo ngày, không bao gồm công việc đã hoàn thành.',
+          style: TextStyle(color: mutedColor, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cards = <Widget>[
+              _e3Group(
+                title: 'Đã quá hạn',
+                tasks: overdue,
+                color: const Color(0xFFDC2626),
+                icon: Icons.warning_amber_rounded,
+              ),
+              _e3Group(
+                title: 'Đến hạn hôm nay',
+                tasks: dueToday,
+                color: const Color(0xFFD97706),
+                icon: Icons.today_outlined,
+              ),
+              _e3Group(
+                title: 'Sắp đến hạn (ngày mai)',
+                tasks: dueTomorrow,
+                color: primaryColor,
+                icon: Icons.schedule_outlined,
+              ),
+            ];
+
+            if (constraints.maxWidth >= 820) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 12),
+                  Expanded(child: cards[1]),
+                  const SizedBox(width: 12),
+                  Expanded(child: cards[2]),
+                ],
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                cards[0],
+                const SizedBox(height: 10),
+                cards[1],
+                const SizedBox(height: 10),
+                cards[2],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // =====================================================
   // NỘI DUNG DANH SÁCH
   // =====================================================
 
@@ -992,6 +1213,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
             inProgress: inProgress,
             completed: completed,
           ),
+
+          const SizedBox(height: 24),
+
+          _buildE3Deadlines(),
 
           const SizedBox(height: 24),
 
