@@ -831,8 +831,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     // Thống kê từ toàn bộ công việc,
     // không bị thay đổi khi lọc danh sách.
+
+    // E1: Thong ke tu tat ca cong viec lien quan.
+    // Khong bi anh huong boi tim kiem va bo loc B6.
+    final totalTasks = _allTasks.length;
+
+    final notStarted = _allTasks
+        .where((task) => task['status'] == 'chua_thuc_hien')
+        .length;
+
     final inProgress = _allTasks
         .where((task) => task['status'] == 'dang_thuc_hien')
+        .length;
+
+    final completed = _allTasks
+        .where((task) => task['status'] == 'da_hoan_thanh')
         .length;
 
     return RefreshIndicator(
@@ -859,22 +872,75 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
           const SizedBox(height: 20),
 
-          Row(
-            children: [
-              _statCard(
+          // =====================================================
+          // E1. THONG KE CONG VIEC THEO TRANG THAI
+          // =====================================================
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 760;
+
+              Widget totalCard() => _statCard(
                 title: 'Tổng công việc',
-                value: '${_allTasks.length}',
+                value: '$totalTasks',
                 icon: Icons.assignment_outlined,
                 color: primaryColor,
-              ),
-              const SizedBox(width: 12),
-              _statCard(
+              );
+
+              Widget notStartedCard() => _statCard(
+                title: 'Chưa thực hiện',
+                value: '$notStarted',
+                icon: Icons.radio_button_unchecked,
+                color: const Color(0xFF64748B),
+              );
+
+              Widget inProgressCard() => _statCard(
                 title: 'Đang thực hiện',
                 value: '$inProgress',
                 icon: Icons.pending_actions_outlined,
                 color: const Color(0xFFD97706),
-              ),
-            ],
+              );
+
+              Widget completedCard() => _statCard(
+                title: 'Đã hoàn thành',
+                value: '$completed',
+                icon: Icons.check_circle_outline,
+                color: const Color(0xFF059669),
+              );
+
+              if (isWide) {
+                return Row(
+                  children: [
+                    totalCard(),
+                    const SizedBox(width: 12),
+                    notStartedCard(),
+                    const SizedBox(width: 12),
+                    inProgressCard(),
+                    const SizedBox(width: 12),
+                    completedCard(),
+                  ],
+                );
+              }
+
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      totalCard(),
+                      const SizedBox(width: 12),
+                      notStartedCard(),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      inProgressCard(),
+                      const SizedBox(width: 12),
+                      completedCard(),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 24),
@@ -970,9 +1036,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   Future<void> _openNotifications() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const NotificationScreen()),
-    );
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const NotificationScreen()));
     if (mounted) await _loadTasks();
   }
 
