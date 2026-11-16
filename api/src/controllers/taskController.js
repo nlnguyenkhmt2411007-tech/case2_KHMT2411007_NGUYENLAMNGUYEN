@@ -1,3 +1,4 @@
+const { recordTaskActivity } = require("../services/taskActivityService");
 
 const { visibleQuery, taskRole, eq } = require("../middleware/taskAccess");
 const User = require("../models/User");
@@ -190,6 +191,23 @@ async function createTask(req, res) {
       dueDate: parsedDueDate,
       createdBy: req.user._id
     });
+
+    // E4. Record activity after successful task creation.
+    const activityResult = await recordTaskActivity({
+      taskId: task._id,
+      actorId: req.user._id,
+      action: "task_created",
+      description: "Đã tạo công việc",
+      metadata: {
+        title: task.title,
+        status: task.status,
+        priority: task.priority
+      }
+    });
+
+    if (!activityResult.success) {
+      console.error("[E4] Create activity:", activityResult.message);
+    }
 
     return res.status(201).json({
       success: true,
@@ -620,6 +638,20 @@ async function updateTask(req, res) {
     // D3. LUU GIA TRI CU TRUOC KHI CAP NHAT
     // ==================================================
 
+    // E4. Snapshot before updating task.
+    const oldTaskData = {
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      startDate: task.startDate
+        ? new Date(task.startDate.getTime())
+        : null,
+      dueDate: task.dueDate
+        ? new Date(task.dueDate.getTime())
+        : null
+    };
+
     const oldStatus = task.status;
 
     const oldDueDate = task.dueDate
@@ -784,6 +816,83 @@ async function updateTask(req, res) {
 
     const statusChanged =
       oldStatus !== task.status;
+
+    // E4_UPDATE_ACTIVITY_START
+    // Record only actual task changes after successful save.
+    const changedFields = {};
+
+    const trackedFields = [
+      "title",
+      "description",
+      "priority",
+      "startDate",
+      "dueDate"
+    ];
+
+    const normalizeValue = (value) => {
+      if (value === null || value === undefined) {
+        return null;
+      }
+
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
+      return value;
+    };
+
+    for (const field of trackedFields) {
+      const before = normalizeValue(oldTaskData[field]);
+      const after = normalizeValue(task[field]);
+
+      if (before !== after) {
+        changedFields[field] = { before, after };
+      }
+    }
+
+    const activityEvents = [];
+
+    if (Object.keys(changedFields).length > 0) {
+      activityEvents.push({
+        action: "task_updated",
+        description: "Đã cập nhật thông tin công việc",
+        metadata: { changedFields }
+      });
+    }
+
+    if (statusChanged) {
+      const isCompleted =
+        task.status === "da_hoan_thanh";
+
+      activityEvents.push({
+        action: isCompleted
+          ? "task_completed"
+          : "task_status_changed",
+        description: isCompleted
+          ? "Đã hoàn thành công việc"
+          : "Đã thay đổi trạng thái công việc",
+        metadata: {
+          oldStatus,
+          newStatus: task.status
+        }
+      });
+    }
+
+    for (const event of activityEvents) {
+      const result = await recordTaskActivity({
+        taskId: task._id,
+        actorId: req.user._id,
+        ...event
+      });
+
+      if (!result.success) {
+        console.error(
+          "[E4] Update activity warning:",
+          result.message
+        );
+      }
+    }
+    // E4_UPDATE_ACTIVITY_END
 
     const oldDueTime = oldDueDate
       ? oldDueDate.getTime()

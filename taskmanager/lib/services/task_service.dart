@@ -543,4 +543,95 @@ class TaskService {
       };
     }
   }
+
+  // =====================================================
+  // E4. LICH SU HOAT DONG CONG VIEC
+  // GET /api/tasks/:id/activities
+  // =====================================================
+  static Future<Map<String, dynamic>> getTaskActivities(String taskId) async {
+    final token = AuthService.accessToken;
+
+    if (token == null || token.isEmpty) {
+      return {
+        'success': false,
+        'message': 'Bạn cần đăng nhập để xem lịch sử hoạt động',
+        'data': <dynamic>[],
+      };
+    }
+
+    if (!RegExp(r'^[0-9a-fA-F]{24}$').hasMatch(taskId)) {
+      return {
+        'success': false,
+        'message': 'ID công việc không hợp lệ',
+        'data': <dynamic>[],
+      };
+    }
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/tasks/$taskId/activities'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Phản hồi máy chủ không hợp lệ');
+      }
+
+      if (response.statusCode == 401) {
+        AuthService.logout();
+        return {
+          'success': false,
+          'message': 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+          'data': <dynamic>[],
+        };
+      }
+
+      if (response.statusCode == 403 || response.statusCode == 404) {
+        return {
+          'success': false,
+          'message':
+              'Không tìm thấy công việc hoặc bạn không có quyền xem lịch sử.',
+          'data': <dynamic>[],
+        };
+      }
+
+      if (response.statusCode == 200 && decoded['success'] == true) {
+        final activities = decoded['data'];
+
+        if (activities is! List) {
+          return {
+            'success': false,
+            'message': 'Danh sách lịch sử không hợp lệ',
+            'data': <dynamic>[],
+          };
+        }
+
+        return {
+          'success': true,
+          'message': decoded['message'] ?? 'Lấy lịch sử thành công',
+          'data': activities,
+          'count': activities.length,
+        };
+      }
+
+      return {
+        'success': false,
+        'message': decoded['message'] ?? 'Không thể tải lịch sử hoạt động',
+        'data': <dynamic>[],
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Không thể kết nối đến máy chủ. Vui lòng thử lại.',
+        'data': <dynamic>[],
+      };
+    }
+  }
 }

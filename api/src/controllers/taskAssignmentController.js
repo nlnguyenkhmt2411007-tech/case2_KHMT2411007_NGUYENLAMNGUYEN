@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 
 const Task = require("../models/Task");
 const User = require("../models/User");
+const {
+  recordTaskActivity
+} = require("../services/taskActivityService");
 
 // ======================================================
 // D1. SERVICE THÔNG BÁO KHI GIAO CÔNG VIỆC
@@ -196,6 +199,31 @@ async function assignTask(req, res) {
         message: "Không tìm thấy công việc"
       });
     }
+
+    // ==================================================
+    // E4. GHI LICH SU KHI GIAO CONG VIEC THANH CONG
+    // ==================================================
+
+    const activityResult = await recordTaskActivity({
+      taskId: updatedTask._id,
+      actorId: req.user._id,
+      action: "task_assigned",
+      description: `Đã giao công việc cho ${users.length} người`,
+      metadata: {
+        assigneeIds: users.map((user) => String(user._id)),
+        assigneeNames: users.map((user) => user.fullName)
+      }
+    });
+
+    // Khong ghi duoc lich su thi khong huy ket qua giao viec.
+    if (!activityResult.success) {
+      console.error(
+        "E4 assignment activity warning:",
+        activityResult.message
+      );
+    }
+
+
 
     // 10. Lấy danh sách tất cả người được giao.
     const assignedUsers = await User.find({

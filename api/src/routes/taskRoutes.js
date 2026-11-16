@@ -19,6 +19,7 @@ const {
 
 const {requireTask,requireOwner} = require("../middleware/taskAccess");
 const team=require("../controllers/taskTeamController");
+const { getTaskActivities } = require("../controllers/taskActivityController");
 const router = express.Router();
 
 // ======================================================
@@ -54,6 +55,7 @@ router.delete("/:id/shares/:userId",requireAuth,requireTask,requireOwner,team.re
 
 // B3. Xem chi tiết công việc
 // GET /api/tasks/:id
+router.get("/:id/activities", requireAuth, requireTask, getTaskActivities);
 router.get("/:id", requireAuth, getTaskById);
 
 // B4. Chỉnh sửa công việc

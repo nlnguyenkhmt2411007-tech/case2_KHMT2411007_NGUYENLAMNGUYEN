@@ -1,3 +1,4 @@
+const { recordTaskActivity } = require("../services/taskActivityService");
 
 const User = require("../models/User");
 const { eq } = require("../middleware/taskAccess");
@@ -149,8 +150,36 @@ async function primary(req, res) {
       });
     }
 
+    const oldPrimaryAssigneeId = req.task.primaryAssigneeId
+      ? String(req.task.primaryAssigneeId)
+      : null;
+
+    const newPrimaryAssigneeId = String(user._id);
+
     req.task.primaryAssigneeId = user._id;
     await req.task.save();
+
+    // E4. Record primary assignee change.
+    if (oldPrimaryAssigneeId !== newPrimaryAssigneeId) {
+      const activityResult = await recordTaskActivity({
+        taskId: req.task._id,
+        actorId: req.user._id,
+        action: "task_primary_changed",
+        description: "Đã thay đổi người phụ trách chính",
+        metadata: {
+          oldPrimaryAssigneeId,
+          newPrimaryAssigneeId,
+          newPrimaryAssigneeName: user.fullName
+        }
+      });
+
+      if (!activityResult.success) {
+        console.error(
+          "[E4] Primary activity warning:",
+          activityResult.message
+        );
+      }
+    }
 
     res.json({
       success: true,
@@ -183,11 +212,34 @@ async function removeAssignee(req, res) {
       });
     }
 
-    if (eq(req.task.primaryAssigneeId, id)) {
+    const wasPrimaryAssignee = Boolean(
+      eq(req.task.primaryAssigneeId, id)
+    );
+
+    if (wasPrimaryAssignee) {
       req.task.primaryAssigneeId = null;
     }
 
     await req.task.save();
+
+    // E4. Record successful assignee removal.
+    const activityResult = await recordTaskActivity({
+      taskId: req.task._id,
+      actorId: req.user._id,
+      action: "task_assignee_removed",
+      description: "Đã thu hồi giao việc",
+      metadata: {
+        removedAssigneeId: String(id),
+        wasPrimaryAssignee
+      }
+    });
+
+    if (!activityResult.success) {
+      console.error(
+        "[E4] Remove assignee activity warning:",
+        activityResult.message
+      );
+    }
 
     res.json({
       success: true,
@@ -231,14 +283,27 @@ async function upsertShares(req, res) {
     // D2: Chi thong bao cho nguoi moi duoc chia se.
     const newRecipientIds = [];
 
+    // E4: Collect actual changes before saving.
+    const shareActivityChanges = [];
+
     for (const u of users) {
       const found = req.task.shares.find(
         s => eq(s.userId, u._id)
       );
 
       if (found) {
-        // Cap nhat quyen cua nguoi da duoc chia se.
-        found.role = role;
+        const oldRole = found.role;
+
+        if (oldRole !== role) {
+          found.role = role;
+
+          shareActivityChanges.push({
+            action: "task_share_permission_changed",
+            userId: String(u._id),
+            oldRole,
+            newRole: role
+          });
+        }
       } else {
         // Them nguoi moi vao danh sach chia se.
         req.task.shares.push({
@@ -247,11 +312,42 @@ async function upsertShares(req, res) {
         });
 
         newRecipientIds.push(u._id);
+
+        shareActivityChanges.push({
+          action: "task_shared",
+          userId: String(u._id),
+          newRole: role
+        });
       }
     }
 
     // Luu chia se thanh cong truoc khi tao thong bao.
     await req.task.save();
+
+    // E4: Record only successfully saved share changes.
+    for (const change of shareActivityChanges) {
+      const activityResult = await recordTaskActivity({
+        taskId: req.task._id,
+        actorId: req.user._id,
+        action: change.action,
+        description:
+          change.action === "task_shared"
+            ? "Đã chia sẻ công việc"
+            : "Đã thay đổi quyền chia sẻ",
+        metadata: {
+          sharedUserId: change.userId,
+          oldRole: change.oldRole || null,
+          newRole: change.newRole
+        }
+      });
+
+      if (!activityResult.success) {
+        console.error(
+          "[E4] Share activity warning:",
+          activityResult.message
+        );
+      }
+    }
 
     let notificationResult = {
       success: true,
@@ -346,20 +442,45 @@ async function upsertShares(req, res) {
 async function removeShare(req, res) {
   try {
     const id = req.params.userId;
-    const before = req.task.shares.length;
 
-    req.task.shares = req.task.shares.filter(
-      s => !eq(s.userId, id)
+    // E4: Remember the role before removing the share.
+    const existingShare = req.task.shares.find(
+      s => eq(s.userId, id)
     );
 
-    if (before === req.task.shares.length) {
+    if (!existingShare) {
       return res.status(404).json({
         success: false,
         message: "Chưa chia sẻ cho tài khoản này"
       });
     }
 
+    const oldRole = existingShare.role;
+
+    req.task.shares = req.task.shares.filter(
+      s => !eq(s.userId, id)
+    );
+
     await req.task.save();
+
+    // E4: Record only a successfully saved removal.
+    const activityResult = await recordTaskActivity({
+      taskId: req.task._id,
+      actorId: req.user._id,
+      action: "task_share_removed",
+      description: "Đã thu hồi quyền chia sẻ",
+      metadata: {
+        removedUserId: String(id),
+        oldRole
+      }
+    });
+
+    if (!activityResult.success) {
+      console.error(
+        "[E4] Remove share activity warning:",
+        activityResult.message
+      );
+    }
 
     res.json({
       success: true,
